@@ -88,42 +88,60 @@ func (s *ScanIp) GetIpOpenPort(ip string, port string, wsConn *wsConn.WsConnecti
 	return openPorts
 }
 
-//获取所有ip
+//获取所有ip,加入功能：允许传入通过逗号分隔的多个ip
 func (s *ScanIp) GetAllIp(ip string) ([]string, error) {
-	var (
-		ips []string
-	)
+    var (
+        ips []string
+    )
 
-	ipTmp := strings.Split(ip, "-")
-	firstIp, err := net.ResolveIPAddr("ip", ipTmp[0])
-	if err != nil {
-		return ips, errors.New(ipTmp[0] + "域名解析失败" + err.Error())
-	}
-	if net.ParseIP(firstIp.String()) == nil {
-		return ips, errors.New(ipTmp[0] + " ip地址有误~")
-	}
-	//域名转化成ip再塞回去
-	ipTmp[0] = firstIp.String()
-	ips = append(ips, ipTmp[0]) //最少有一个ip地址
+    // 处理以逗号分隔的多个IP地址或范围
+    ipParts := strings.Split(ip, ",")
+    for _, ipPart := range ipParts {
+        partIps, err := s.getSingleIpRange(ipPart)
+        if err != nil {
+            return ips, err
+        }
+        ips = append(ips, partIps...)
+    }
 
-	if len(ipTmp) == 2 {
-		//以切割第一段ip取到最后一位
-		ipTmp2 := strings.Split(ipTmp[0], ".")
-		startIp, _ := strconv.Atoi(ipTmp2[3])
-		endIp, err := strconv.Atoi(ipTmp[1])
-		if err != nil || endIp < startIp {
-			endIp = startIp
-		}
-		if endIp > 255 {
-			endIp = 255
-		}
-		totalIp := endIp - startIp + 1
-		for i := 1; i < totalIp; i++ {
-			ips = append(ips, fmt.Sprintf("%s.%s.%s.%d", ipTmp2[0], ipTmp2[1], ipTmp2[2], startIp+i))
-		}
-	}
-	return ips, nil
+    return ips, nil
 }
+
+func (s *ScanIp) getSingleIpRange(ip string) ([]string, error) {
+    var (
+        ips []string
+    )
+
+    ipTmp := strings.Split(ip, "-")
+    firstIp, err := net.ResolveIPAddr("ip", ipTmp[0])
+    if err != nil {
+        return ips, errors.New(ipTmp[0] + " 域名解析失败: " + err.Error())
+    }
+    if net.ParseIP(firstIp.String()) == nil {
+        return ips, errors.New(ipTmp[0] + " IP地址有误")
+    }
+    ipTmp[0] = firstIp.String()
+    ips = append(ips, ipTmp[0])
+
+    if len(ipTmp) == 2 {
+        ipTmp2 := strings.Split(ipTmp[0], ".")
+        startIp, _ := strconv.Atoi(ipTmp2[3])
+        endIp, err := strconv.Atoi(ipTmp[1])
+        if err != nil || endIp < startIp {
+            endIp = startIp
+        }
+        if endIp > 255 {
+            endIp = 255
+        }
+        totalIp := endIp - startIp + 1
+        for i := 1; i < totalIp; i++ {
+            ips = append(ips, fmt.Sprintf("%s.%s.%s.%d", ipTmp2[0], ipTmp2[1], ipTmp2[2], startIp+i))
+        }
+    }
+
+    return ips, nil
+}
+
 
 //记录日志
 func (s *ScanIp) sendLog(str string, wsConn *wsConn.WsConnection) {
